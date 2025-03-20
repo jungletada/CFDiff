@@ -215,7 +215,7 @@ def main():
     ny = x.shape[3]
 
     channels_weights = torch.sqrt(torch.mean(y.permute(0, 2, 3, 1)
-        .reshape((batch*nx*ny,3)) ** 2, dim=0)).view(1, -1, 1, 1).to(options["device"])
+        .reshape((batch*nx*ny, 3)) ** 2, dim=0)).view(1, -1, 1, 1).to(options["device"])
 
     dirname = os.path.dirname(os.path.abspath(options["output"]))
     if dirname and not os.path.exists(dirname):

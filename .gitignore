@@ -2,9 +2,11 @@
 *.pkl
 *.txt
 *.pth
+*.png
+*.tiff
 
 data/
-
+checkpoints/
 .ipynb_checkpoints/
 __pycache__/
 Results/
