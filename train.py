@@ -55,13 +55,16 @@ def main():
     
     # Only rank 0 initializes wandb
     if rank == 0:
-        wandb.init(project="UNetEx_MultiGPU", entity="your_wandb_username", config={
-            "epochs": num_epochs,
-            "batch_size": batch_size,
-            "learning_rate": learning_rate,
-            "architecture": "UNetEx",
-            "distributed": True
-        })
+        wandb.init(
+            entity="dingjie-peng-waseda-university",
+            project="small-demo",
+            config={
+                "epochs": num_epochs,
+                "batch_size": batch_size,
+                "learning_rate": learning_rate,
+                "architecture": "UNetEx",
+                "distributed": True}
+            )
 
     # Create checkpoint directory
     checkpoint_dir = "checkpoints"

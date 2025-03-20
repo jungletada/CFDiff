@@ -1,0 +1,17 @@
+{"time":"2025-03-20T17:21:06.105703874+09:00","level":"INFO","msg":"stream: starting","core version":"0.19.8","symlink path":"/home/peng/code/CFDiff/wandb/run-20250320_172106-965m4atn/logs/debug-core.log"}
+{"time":"2025-03-20T17:21:07.712812018+09:00","level":"INFO","msg":"created new stream","id":"965m4atn"}
+{"time":"2025-03-20T17:21:07.712838368+09:00","level":"INFO","msg":"stream: started","id":"965m4atn"}
+{"time":"2025-03-20T17:21:07.712877973+09:00","level":"INFO","msg":"writer: Do: started","stream_id":"965m4atn"}
+{"time":"2025-03-20T17:21:07.712895597+09:00","level":"INFO","msg":"handler: started","stream_id":"965m4atn"}
+{"time":"2025-03-20T17:21:07.712912338+09:00","level":"INFO","msg":"sender: started","stream_id":"965m4atn"}
+{"time":"2025-03-20T17:21:07.958245614+09:00","level":"ERROR","msg":"HTTP error","status":404,"method":"POST","url":"https://api.wandb.ai/graphql"}
+{"time":"2025-03-20T17:21:07.95837547+09:00","level":"ERROR","msg":"sender: upsertRun:","error":"failed to upsert bucket: returned error 404: {\"data\":{\"upsertBucket\":null},\"errors\":[{\"message\":\"entity my-awesome-team-name not found during upsertBucket\",\"path\":[\"upsertBucket\"]}]}"}
+{"time":"2025-03-20T17:21:08.960879274+09:00","level":"INFO","msg":"stream: closing","id":"965m4atn"}
+{"time":"2025-03-20T17:21:08.961492195+09:00","level":"ERROR","msg":"sender: upsertConfig: RunRecord is nil"}
+{"time":"2025-03-20T17:21:09.231168509+09:00","level":"ERROR","msg":"HTTP error","status":404,"method":"POST","url":"https://api.wandb.ai/graphql"}
+{"time":"2025-03-20T17:21:09.23138578+09:00","level":"ERROR","msg":"runfiles: CreateRunFiles returned error: returned error 404: {\"data\":{\"createRunFiles\":null},\"errors\":[{\"message\":\"entity my-awesome-team-name not found during createRunFiles\",\"path\":[\"createRunFiles\"]}]}"}
+{"time":"2025-03-20T17:21:09.231826054+09:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-03-20T17:21:09.231867643+09:00","level":"INFO","msg":"handler: closed","stream_id":"965m4atn"}
+{"time":"2025-03-20T17:21:09.231887781+09:00","level":"INFO","msg":"writer: Close: closed","stream_id":"965m4atn"}
+{"time":"2025-03-20T17:21:09.231899052+09:00","level":"INFO","msg":"sender: closed","stream_id":"965m4atn"}
+{"time":"2025-03-20T17:21:09.231937154+09:00","level":"INFO","msg":"stream: closed","id":"965m4atn"}
