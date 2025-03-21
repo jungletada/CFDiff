@@ -43,7 +43,7 @@ def main():
     
     # Hyperparameters
     num_epochs = 2000
-    batch_size = 8
+    batch_size = 16
     learning_rate = 1e-4
     log_interval = 20  # Log every X steps
     
@@ -65,7 +65,7 @@ def main():
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer, 
         T_max=num_epochs, 
-        eta_min=1e-6)
+        eta_min=1e-5)
     
     # Only rank 0 initializes wandb
     if rank == 0:
