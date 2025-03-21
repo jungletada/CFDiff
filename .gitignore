@@ -5,6 +5,7 @@
 *.png
 *.tiff
 
+wandb/
 data/
 checkpoints/
 .ipynb_checkpoints/

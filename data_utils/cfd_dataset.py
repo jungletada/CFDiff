@@ -4,6 +4,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
+import wandb
 
 
 def visualize_field(field_tensor, filename):
@@ -33,8 +34,9 @@ def visualize_field(field_tensor, filename):
     plt.axis('off')  # Optional: turn off axes for a cleaner image
     
     # Save the figure to a TIFF file
-    plt.savefig(filename, format='tiff')
+    plt.savefig(filename, format='png')
     plt.close()  # Close the figure to free memory
+    # Log the image to wandb
 
 
 def default_resize_transform(image, target_height=256, target_width=1024):
@@ -119,10 +121,13 @@ class CaseDataDataset(Dataset):
             'velocity': velocity_tensor
         }
         
-        return contour_tensor, target
+        return file_name, contour_tensor, target
 
 
 if __name__ == '__main__':
+    wandb.init(
+        entity="dingjie-peng-waseda-university",
+        project="small-demo",)
     root_dir = 'data/case_data1/fluent_data_fig'  # Root folder containing the four child folders.
     dataset = CaseDataDataset(root_dir)
     
