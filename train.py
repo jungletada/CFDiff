@@ -22,12 +22,16 @@ def cleanup():
     dist.destroy_process_group()
 
 
-def training_criterion(outputs, targets):
+def training_criterion(intputs, outputs, targets):
+    input_x = intputs.detach()
+    masks = 1. - input_x[:, 0]
+    
     mse_criterion = nn.MSELoss(reduction='mean')
     l1_criterion = nn.L1Loss(reduction='mean')
-    loss_P = l1_criterion(outputs[:,0,:,:], targets[:,0,:,:])
-    loss_T = mse_criterion(outputs[:,1,:,:], targets[:,1,:,:])
-    loss_V = mse_criterion(outputs[:,2,:,:], targets[:,2,:,:])
+    
+    loss_P = l1_criterion(outputs[:,0,:,:] * masks, targets[:,0,:,:] * masks)
+    loss_T = mse_criterion(outputs[:,1,:,:] * masks, targets[:,1,:,:] * masks)
+    loss_V = mse_criterion(outputs[:,2,:,:] * masks, targets[:,2,:,:] * masks)
     loss = loss_T + loss_V + loss_P
     return loss
     
@@ -35,7 +39,6 @@ def training_criterion(outputs, targets):
 def main():
     # Initialize distributed training
     setup_ddp()
-    
     # Set device
     rank = dist.get_rank()
     local_rank = rank % torch.cuda.device_count()
@@ -43,19 +46,19 @@ def main():
     
     # Hyperparameters
     num_epochs = 2000
-    batch_size = 16
-    learning_rate = 1e-4
+    batch_size = 32
+    learning_rate = 1e-3
     log_interval = 20  # Log every X steps
     
     # Dataset and DataLoader (using DistributedSampler)
     root_dir = 'data/case_data1/fluent_data_fig'
     dataset = CaseDataDataset(root_dir)
-    
     sampler = DistributedSampler(dataset, num_replicas=dist.get_world_size(), rank=rank, shuffle=True)
-    dataloader = DataLoader(dataset, batch_size=batch_size, sampler=sampler, num_workers=2, pin_memory=True)
+    dataloader = DataLoader(dataset, batch_size=batch_size, sampler=sampler, 
+                            num_workers=dist.get_world_size()*2, pin_memory=True)
     
     # Initialize model and move to GPU
-    model = UNetEx(in_channels=1, out_channels=3).to(device)
+    model = UNetEx(in_channels=2, out_channels=3).to(device)
     model = DDP(model, device_ids=[local_rank], output_device=local_rank)
     
     # Loss function and optimizer
@@ -93,16 +96,10 @@ def main():
         running_loss = 0.0
         for i, (_, inputs, targets) in enumerate(dataloader):
             inputs = inputs.to(device)
-
-            target_pressure = targets['pressure'].to(device)
-            target_temperature = targets['temperature'].to(device)
-            target_velocity = targets['velocity'].to(device)
-            
-            targets_tensor = torch.cat([target_pressure, target_temperature, target_velocity], dim=1)
-            
+            targets = targets.to(device)
             # Forward pass
             outputs = model(inputs)
-            loss = training_criterion(outputs, targets_tensor)
+            loss = training_criterion(inputs, outputs, targets)
 
             # Backward pass and optimization
             optimizer.zero_grad()
@@ -131,6 +128,7 @@ def main():
     
     # Clean up DDP
     cleanup()
+
 
 if __name__ == '__main__':
     main()

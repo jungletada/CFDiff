@@ -8,14 +8,14 @@ from src.deepcfd.models.UNetEx import UNetEx
 from data_utils.cfd_dataset import CaseDataDataset
 
 
-def visualize_results(prediction, label, filename):
+def visualize_results(contour, prediction, label, filename):
     # Create a plot with the reversed grayscale colormap so 0=white, 1=black
-    data = torch.cat((prediction, label), dim=0)
+    # mask = contour
+    data = torch.cat((prediction * contour, label * contour), dim=0)
     data = data.cpu().numpy()
     plt.figure()
     plt.imshow(data, cmap='gray_r', vmin=0, vmax=1)  # vmin/vmax set to 0-1 for proper color scaling
     plt.axis('off')  # Optional: turn off axes for a cleaner image
-    
     # Save the figure to a TIFF file
     plt.savefig(filename, format='png')
     plt.close()  # Close the figure to free memory
@@ -65,23 +65,22 @@ def evaluate(model, dataloader, device):
 
 
 def main():
-    # Test set root directory (should contain subfolders: contour, pressure, temperature, velocity)
-    test_root_dir = 'data/case_data2/fluent_data_fig'
     batch_size = 1
     num_workers = 2
-
+    # Test set root directory (should contain subfolders: contour, pressure, temperature, velocity)
+    test_root_dir = 'data/case_data2/fluent_data_fig'
     # Build the test dataset and dataloader
-    test_dataset = CaseDataDataset(test_root_dir)
+    test_dataset = CaseDataDataset(test_root_dir, train=False)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
     
     # Set device for computation
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # Initialize the model (input: contour image with 1 channel, output: 3 channels for pressure, temperature, velocity)
-    model = UNetEx(in_channels=1, out_channels=3).to(device)
+    model = UNetEx(in_channels=2, out_channels=3).to(device)
     
     # Optionally load a trained checkpoint if available
-    checkpoint_path = os.path.join("checkpoints", "epoch_500.pth")
+    checkpoint_path = os.path.join("checkpoints", "epoch_2000.pth")
     if os.path.exists(checkpoint_path):
         print(f"Loading model checkpoint from {checkpoint_path} ...")
         model.load_state_dict(torch.load(checkpoint_path, map_location=device))
@@ -101,9 +100,10 @@ def main():
             # Move input to device
             inputs = inputs.to(device)  # Shape: (B, 1, H, W)
             # Move each target modality to device and then concatenate along channel dim.
-            target_pressure    = targets['pressure'].to(device)
-            target_temperature = targets['temperature'].to(device)
-            target_velocity    = targets['velocity'].to(device)
+            targets = targets.to(device)  # Shape: (B, 1, H, W)
+            target_pressure    = targets[0][0]
+            target_temperature = targets[0][1]
+            target_velocity    = targets[0][2]
             
             # Concatenate targets: final shape (B, 3, H, W)
             targets = torch.cat([
@@ -113,11 +113,12 @@ def main():
             
             # Forward pass
             outputs = model(inputs).squeeze()
-            contour = inputs[0]
-            
-            visualize_results(target_pressure.squeeze(), outputs[0], filename=f'{results_path}/{filename}-pressure.png')
-            visualize_results(target_temperature.squeeze(), outputs[1], filename=f'{results_path}/{filename}-temperature.png')
-            visualize_results(target_velocity.squeeze(), outputs[2], filename=f'{results_path}/{filename}-velocity.png')
+            contour = inputs.squeeze()[0]
+
+            base_path = f"{results_path}/{filename[0]}"
+            visualize_results(contour, target_pressure, outputs[0], filename=f'{base_path}-pressure.png')
+            visualize_results(contour, target_temperature, outputs[1], filename=f'{base_path}-temperature.png')
+            visualize_results(contour, target_velocity, outputs[2], filename=f'{base_path}-velocity.png')
 
 if __name__ == '__main__':
     main()

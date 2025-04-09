@@ -1,10 +1,9 @@
 import os
 import cv2
 import torch
-from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
-import wandb
+from torch.utils.data import Dataset, DataLoader
 
 
 def visualize_field(field_tensor, filename):
@@ -39,29 +38,122 @@ def visualize_field(field_tensor, filename):
     # Log the image to wandb
 
 
-def default_resize_transform(image, target_height=256, target_width=1024):
+def transform_train(images, target_height=256, target_width=512):
     """
-    Resizes a single-channel image (a NumPy array) so that its height is target_height,
-    while preserving the aspect ratio using linear interpolation.
+    Applies a random rotation (±10°) before resizing, random horizontal flip, and center cropping.
+    If the input is a tuple or list of images, the same transformation is applied to each image.
     
     Args:
-        image (np.ndarray): Input single-channel image.
+        images (np.ndarray or tuple/list of np.ndarray): Input single-channel image or tuple/list of images.
         target_height (int): Desired height after resizing.
+        target_width (int): Desired width after cropping.
         
     Returns:
-        np.ndarray: Resized image.
+        np.ndarray or tuple: Transformed image or tuple of transformed images.
     """
-    original_height, original_width = image.shape
-    scale = target_height / original_height
-    new_width = int(original_width * scale)
-    resized = cv2.resize(image, (new_width, target_height), interpolation=cv2.INTER_LINEAR)
-    width_left = (new_width - target_width) // 2
-    resized = resized[:, width_left:width_left+target_width]
-    return resized
+
+    first_img = images[0]
+    
+    # flow_img = np.expand_dims(flow_img, axis=-1)
+    # Apply random rotation on the first image to determine the common transformation parameters.
+    angle = np.random.uniform(-15, 15)
+    center = (first_img.shape[1] // 2, first_img.shape[0] // 2)  # (x, y) center
+    rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+    # Generate a random horizontal flip flag (True with 50% probability).
+    flip_flag = np.random.rand() < 0.5
+    
+    # Apply rotation to the first image to compute the new dimensions (should remain same as original for cv2.warpAffine)
+    # Use cv2.BORDER_REFLECT to avoid black borders.
+    def transform_single(image):
+        # 1. Random Rotation
+        rotated = cv2.warpAffine(image, rotation_matrix, (image.shape[1], image.shape[0]),
+                                 flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+        
+        # 2. Resize the rotated image so that its height is target_height while preserving aspect ratio.
+        original_height, original_width = rotated.shape
+        scale = target_height / original_height
+        new_width = int(original_width * scale)
+        resized = cv2.resize(rotated, (new_width, target_height), interpolation=cv2.INTER_LINEAR)
+        
+        # 3. Random horizontal flip (50% chance) using the same decision for all images.
+        # (We generate the flip flag once outside, so here we assume that variable is defined)
+        if flip_flag:
+            resized = np.fliplr(resized)
+        
+        # 4. Center crop to target_width.
+        width_left = (resized.shape[1] - target_width) // 2
+        cropped = resized[:, width_left:width_left + target_width]
+        
+        return cropped
+    
+    transformed_images = []
+    for img in images:
+        img = transform_single(img)
+        img = 1.0 - (img.astype(np.float32) / 255.0)
+        img = np.expand_dims(img, axis=0)
+        tensor = torch.from_numpy(img)
+        transformed_images.append(tensor)
+    return transformed_images
+
+
+def transform_test(images, target_height=256, target_width=512):
+    """
+    Applies a random rotation (±10°) before resizing, random horizontal flip, and center cropping.
+    If the input is a tuple or list of images, the same transformation is applied to each image.
+    
+    Args:
+        images (np.ndarray or tuple/list of np.ndarray): Input single-channel image or tuple/list of images.
+        target_height (int): Desired height after resizing.
+        target_width (int): Desired width after cropping.
+        
+    Returns:
+        np.ndarray or tuple: Transformed image or tuple of transformed images.
+    """
+
+    # first_img = images[0]
+    
+    # flow_img = np.expand_dims(flow_img, axis=-1)
+    # Apply random rotation on the first image to determine the common transformation parameters.
+    # angle = np.random.uniform(-15, 15)
+    # center = (first_img.shape[1] // 2, first_img.shape[0] // 2)  # (x, y) center
+    # rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+    
+    # Apply rotation to the first image to compute the new dimensions (should remain same as original for cv2.warpAffine)
+    # Use cv2.BORDER_REFLECT to avoid black borders.
+    def transform_single(image):
+        # # 1. Random Rotation
+        # rotated = cv2.warpAffine(image, rotation_matrix, (image.shape[1], image.shape[0]),
+        #                          flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+        
+        # 2. Resize the rotated image so that its height is target_height while preserving aspect ratio.
+        original_height, original_width = image.shape
+        scale = target_height / original_height
+        new_width = int(original_width * scale)
+        resized = cv2.resize(image, (new_width, target_height), interpolation=cv2.INTER_LINEAR)
+        # 3. Random horizontal flip (50% chance) using the same decision for all images.
+        # (We generate the flip flag once outside, so here we assume that variable is defined)
+        # if flip_flag:
+        #     resized = np.fliplr(resized)
+        # 4. Center crop to target_width.
+        width_left = (resized.shape[1] - target_width) // 2
+        cropped = resized[:, width_left:width_left + target_width]
+        return cropped
+
+    # Generate a random horizontal flip flag (True with 50% probability).
+    # flip_flag = np.random.rand() < 0.5
+    
+    transformed_images = []
+    for img in images:
+        img = transform_single(img)
+        img = 1.0 - (img.astype(np.float32) / 255.0)
+        img = np.expand_dims(img, axis=0)
+        tensor = torch.from_numpy(img)
+        transformed_images.append(tensor)
+    return transformed_images
 
 
 class CaseDataDataset(Dataset):
-    def __init__(self, root_dir, transform=None):
+    def __init__(self, root_dir, train=True):
         """
         Args:
             root_dir (str): Root directory containing the four child folders:
@@ -75,12 +167,10 @@ class CaseDataDataset(Dataset):
         self.pressure_dir = os.path.join(root_dir, 'pressure')
         self.temperature_dir = os.path.join(root_dir, 'temperature')
         self.velocity_dir = os.path.join(root_dir, 'velocity')
-        
         # Assume file names are identical across subfolders.
         self.file_names = sorted(os.listdir(self.contour_dir))
-        
         # Use provided transform or the default resize transform.
-        self.transform = transform if transform is not None else default_resize_transform
+        self.transform = transform_train if train else transform_test
 
     def read_and_transform(self, path):
         # Read image in grayscale mode using OpenCV.
@@ -109,45 +199,48 @@ class CaseDataDataset(Dataset):
         velocity_path    = os.path.join(self.velocity_dir, file_name)
         
         # Read and transform images.
-        contour_tensor     = self.read_and_transform(contour_path)
-        pressure_tensor    = self.read_and_transform(pressure_path)
-        temperature_tensor = self.read_and_transform(temperature_path)
-        velocity_tensor    = self.read_and_transform(velocity_path)
-        
+        contour_image     = cv2.imread(contour_path, cv2.IMREAD_GRAYSCALE)
+        pressure_image    = cv2.imread(pressure_path, cv2.IMREAD_GRAYSCALE)
+        temperature_image = cv2.imread(temperature_path, cv2.IMREAD_GRAYSCALE)
+        velocity_image    = cv2.imread(velocity_path, cv2.IMREAD_GRAYSCALE)
+
+        h, w = contour_image.shape
+        line_values = np.linspace(255, 0, w, dtype=np.float32) # generate a fluent velocity data.
+        flow_image = np.tile(line_values, (h, 1))
+        tuple_images = (flow_image, contour_image, pressure_image, temperature_image, velocity_image)
+        flow_tensor, contour_tensor, pressure_tensor, temperature_tensor, velocity_tensor = self.transform(tuple_images)
+
         # The contour image is the input and the other three are the targets.
-        target = {
-            'pressure': pressure_tensor,
-            'temperature': temperature_tensor,
-            'velocity': velocity_tensor
-        }
-        
-        return file_name, contour_tensor, target
+        input_tensor = torch.cat((contour_tensor, flow_tensor), dim=0)
+        target_tensor = torch.cat((pressure_tensor,temperature_tensor,velocity_tensor), dim=0)
+        name = file_name.replace('s.tiff', '')
+        return name, input_tensor, target_tensor
 
 
 if __name__ == '__main__':
-    wandb.init(
-        entity="dingjie-peng-waseda-university",
-        project="small-demo",)
     root_dir = 'data/case_data1/fluent_data_fig'  # Root folder containing the four child folders.
     dataset = CaseDataDataset(root_dir)
     
     # Create a DataLoader for batching.
-    dataloader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=2)
-    
-    # Iterate over one batch.
-    for inputs, targets in dataloader:
-        print("Contour batch shape:", inputs.shape)
-        print("Pressure batch shape:", targets['pressure'].shape)
-        print("Temperature batch shape:", targets['temperature'].shape)
-        print("Velocity batch shape:", targets['velocity'].shape)
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=2)
 
+    # Iterate over one batch.
+    for filenames, inputs, targets in dataloader:
+        print("Contour batch shape:", inputs.shape)
+        print("Target batch shape:", targets.shape)
+       
         # Example: visualize a sample's input contour and target fields
         # (Assuming dataset[i] returns a tuple or dict: (contour, pressure, temperature, velocity))
-        contour, pressure, temperature, velocity = inputs[0], targets['pressure'][0], targets['temperature'][0], targets['velocity'][0]
+        index = 0
+        filename = filenames[index]
 
-        visualize_field(contour, "sample_contour.tiff")
-        visualize_field(pressure, "sample_pressure.tiff")
-        visualize_field(temperature, "sample_temperature.tiff")
-        visualize_field(velocity, "sample_velocity.tiff")
+        contour, flow = inputs[index][0], inputs[index][1]
+        pressure, temperature, velocity = targets[index][0], targets[index][1], targets[index][2]
+        
+        visualize_field(flow, f"{filename}_flow.png")
+        visualize_field(contour, f"{filename}_contour.png")
+        visualize_field(pressure, f"{filename}_pressure.png")
+        visualize_field(temperature, f"{filename}_temperature.png")
+        visualize_field(velocity, f"{filename}_velocity.png")
 
         break
