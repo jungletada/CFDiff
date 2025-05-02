@@ -14,16 +14,16 @@ def visualized_csv(csv_file, base_path, target_path):
     x = data['x-coordinate']  # 0, 0.1
     y = data['y-coordinate']  # 0, 0.01
 
-    for k in data.columns:
-        if k in ['pressure', 'x-velocity', 'y-velocity', 'temperature', 'velocity', 'contour']:
-            value = data[k]
+    for col in data.columns:
+        if col in ['pressure', 'x-velocity', 'y-velocity', 'temperature', 'velocity', 'contour']:
+            value = data[col]
             plt.figure() 
-            contour = plt.tricontourf(x, y, value, cmap='binary')
+            plt.tricontourf(x, y, value, cmap='binary')
             plt.gca().set_aspect('equal', 'box')
             plt.axis('off')  # Turn off axis
             plt.tight_layout()  # Adjust layout to remove extra whitespace
-            save_path = os.path.join(target_path, k, csv_file.replace('.csv', '.tiff'))
-            plt.savefig(save_path, dpi=800, transparent=True, format='tiff')
+            save_path = os.path.join(target_path, col, csv_file.replace('.csv', '.png'))
+            plt.savefig(save_path, dpi=800, transparent=True, format='png')
             plt.close()
 
 

@@ -5,11 +5,14 @@
 *.png
 *.tiff
 
+demo/
 wandb/
 data/
 checkpoints/
 .ipynb_checkpoints/
 __pycache__/
-Results/
+results/
+demo/
 BestRun/
 _Results/
+fluent_data_map/
