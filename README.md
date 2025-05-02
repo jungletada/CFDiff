@@ -45,6 +45,8 @@ python3 -m deepcfd \
     --batch-size 32
 ```
 
+torchrun --nnodes=1 --nproc-per-node=1 train.py
+
 ## Dataset and Code
 
 A toy dataset and the code for this project can be downloaded using the following https://zenodo.org/record/3666056/files/DeepCFD.zip?download=1

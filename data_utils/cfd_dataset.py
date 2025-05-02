@@ -1,5 +1,4 @@
 import os
-import cv2
 import torch
 import numpy as np
 from PIL import Image
@@ -46,59 +45,59 @@ def visualize_field(input_image, filename, denormalize=True):
     # Log the image to wandb
 
 
-class CaseDataDataset(Dataset):
-    def __init__(self, root_dir, train=True):
-        """
-        Args:
-            root_dir (str): Root directory containing the four child folders:
-                'contour', 'pressure', 'temperature', 'velocity'.
-            transform (callable, optional): Transform function to apply to each image.
-                If None, a default resize transform is applied that sets the image's
-                height to 256 while preserving its aspect ratio.
-        """
-        self.root_dir = root_dir
-        self.contour_dir = os.path.join(root_dir, 'contour')
-        self.pressure_dir = os.path.join(root_dir, 'pressure')
-        self.temperature_dir = os.path.join(root_dir, 'temperature')
-        self.velocity_dir = os.path.join(root_dir, 'velocity')
-        self.file_names = sorted(os.listdir(self.contour_dir))
+# class CaseDataDataset(Dataset):
+#     def __init__(self, root_dir, train=True):
+#         """
+#         Args:
+#             root_dir (str): Root directory containing the four child folders:
+#                 'contour', 'pressure', 'temperature', 'velocity'.
+#             transform (callable, optional): Transform function to apply to each image.
+#                 If None, a default resize transform is applied that sets the image's
+#                 height to 256 while preserving its aspect ratio.
+#         """
+#         self.root_dir = root_dir
+#         self.contour_dir = os.path.join(root_dir, 'contour')
+#         self.pressure_dir = os.path.join(root_dir, 'pressure')
+#         self.temperature_dir = os.path.join(root_dir, 'temperature')
+#         self.velocity_dir = os.path.join(root_dir, 'velocity')
+#         self.file_names = sorted(os.listdir(self.contour_dir))
 
-    def __len__(self):
-        return len(self.file_names)
+#     def __len__(self):
+#         return len(self.file_names)
 
-    def __getitem__(self, idx):
-        file_name = self.file_names[idx]
-        # Construct full paths for each modality.
-        contour_path     = os.path.join(self.contour_dir, file_name)
-        pressure_path    = os.path.join(self.pressure_dir, file_name)
-        temperature_path = os.path.join(self.temperature_dir, file_name)
-        velocity_path    = os.path.join(self.velocity_dir, file_name)
+#     def __getitem__(self, idx):
+#         file_name = self.file_names[idx]
+#         # Construct full paths for each modality.
+#         contour_path     = os.path.join(self.contour_dir, file_name)
+#         pressure_path    = os.path.join(self.pressure_dir, file_name)
+#         temperature_path = os.path.join(self.temperature_dir, file_name)
+#         velocity_path    = os.path.join(self.velocity_dir, file_name)
         
-        # Read and transform images.
-        contour_image     = cv2.imread(contour_path, cv2.IMREAD_GRAYSCALE)
-        pressure_image    = cv2.imread(pressure_path, cv2.IMREAD_GRAYSCALE)
-        temperature_image = cv2.imread(temperature_path, cv2.IMREAD_GRAYSCALE)
-        velocity_image    = cv2.imread(velocity_path, cv2.IMREAD_GRAYSCALE)
+#         # Read and transform images.
+#         contour_image     = cv2.imread(contour_path, cv2.IMREAD_GRAYSCALE)
+#         pressure_image    = cv2.imread(pressure_path, cv2.IMREAD_GRAYSCALE)
+#         temperature_image = cv2.imread(temperature_path, cv2.IMREAD_GRAYSCALE)
+#         velocity_image    = cv2.imread(velocity_path, cv2.IMREAD_GRAYSCALE)
 
-        h, w = contour_image.shape
-        line_values = np.linspace(255, 0, w, dtype=np.float32) # generate a fluent velocity data.
-        flow_image = np.tile(line_values, (h, 1))
-        image_dict = {
-            "contour": contour_image,
-            "pressure": pressure_image,
-            "temperature": temperature_image,
-            "velocity": velocity_image,
-            "flow": flow_image
-        }
-        image_dict = self.transform(image_dict)
+#         h, w = contour_image.shape
+#         line_values = np.linspace(255, 0, w, dtype=np.float32) # generate a fluent velocity data.
+#         flow_image = np.tile(line_values, (h, 1))
+#         image_dict = {
+#             "contour": contour_image,
+#             "pressure": pressure_image,
+#             "temperature": temperature_image,
+#             "velocity": velocity_image,
+#             "flow": flow_image
+#         }
+#         image_dict = self.transform(image_dict)
 
-        # The contour image is the input and the other three are the targets.
-        input_tensor = torch.cat(
-            (image_dict['contour'],image_dict['flow']), dim=0)
-        target_tensor = torch.cat(
-            (image_dict['pressure'], image_dict['temperature'], image_dict[velocity]), dim=0)
-        name = file_name.replace('.png', '')
-        return name, input_tensor, target_tensor
+#         # The contour image is the input and the other three are the targets.
+#         input_tensor = torch.cat(
+#             (image_dict['contour'],image_dict['flow']), dim=0)
+#         target_tensor = torch.cat(
+#             (image_dict['pressure'], image_dict['temperature'], image_dict[velocity]), dim=0)
+#         name = file_name.replace('.png', '')
+#         return name, input_tensor, target_tensor
 
 
 class CFDDataset(Dataset):

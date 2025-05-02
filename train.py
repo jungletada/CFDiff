@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader, DistributedSampler
 import wandb
 
 from src.deepcfd.models.UNetEx import UNetEx
-from data_utils.cfd_dataset import CaseDataDataset
+from data_utils.cfd_dataset import CFDDataset
 
 
 def setup_ddp():
@@ -48,14 +48,23 @@ def main():
     num_epochs = 2000
     batch_size = 32
     learning_rate = 1e-3
-    log_interval = 20  # Log every X steps
+    log_interval = 20
+    root_dir = 'data/case_data1/fluent_data_map'
     
-    # Dataset and DataLoader (using DistributedSampler)
-    root_dir = 'data/case_data1/fluent_data_fig'
-    dataset = CaseDataDataset(root_dir)
-    sampler = DistributedSampler(dataset, num_replicas=dist.get_world_size(), rank=rank, shuffle=True)
-    dataloader = DataLoader(dataset, batch_size=batch_size, sampler=sampler, 
-                            num_workers=dist.get_world_size()*2, pin_memory=True)
+    dataset = CFDDataset(root_dir, mode='train')
+    
+    sampler = DistributedSampler(
+        dataset, 
+        num_replicas=dist.get_world_size(), 
+        rank=rank, 
+        shuffle=True)
+    
+    dataloader = DataLoader(
+        dataset, 
+        batch_size=batch_size, 
+        sampler=sampler, 
+        num_workers=dist.get_world_size()*2, 
+        pin_memory=True)
     
     # Initialize model and move to GPU
     model = UNetEx(in_channels=2, out_channels=3).to(device)
@@ -94,9 +103,11 @@ def main():
         sampler.set_epoch(epoch)  # Ensure shuffle works correctly in distributed mode
         
         running_loss = 0.0
-        for i, (_, inputs, targets) in enumerate(dataloader):
+        for i, data_ in enumerate(dataloader):
+            inputs, targets, filenames = data_['inputs'], data_['targets'], data_['filepath']
             inputs = inputs.to(device)
             targets = targets.to(device)
+            
             # Forward pass
             outputs = model(inputs)
             loss = training_criterion(inputs, outputs, targets)
