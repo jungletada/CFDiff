@@ -22,9 +22,8 @@ def cleanup():
     dist.destroy_process_group()
 
 
-def training_criterion(intputs, outputs, targets):
-    input_x = intputs.detach()
-    masks = 1. - input_x[:, 0]
+def training_criterion(inputs, outputs, targets):
+    masks = (inputs[:, 0].detach() > 0.5).float()  # 1 for field, 0 for contour
     
     mse_criterion = nn.MSELoss(reduction='mean')
     l1_criterion = nn.L1Loss(reduction='mean')

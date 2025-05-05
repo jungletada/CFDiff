@@ -1,58 +1,57 @@
 import os
 import numpy as np
 from tqdm import tqdm
+from PIL import Image
 
 import torch
 import torch.nn as nn
 
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
+from matplotlib import colormaps
 
 from src.deepcfd.models.UNetEx import UNetEx
 from data_utils.cfd_dataset import CFDDataset
 
 
-def visualize_results(contour, pred, label, filename, denormalize=True):
+def apply_colors_to_array(x, mask):
+    """
+    Args:
+        x: numpy array of shape (H, W), values in [0, 1]
+    Returns:
+        rgb: numpy array of shape (3, H, W), dtype=float32, RGB values in [0, 1]
+    """
+    # Get the viridis colormap
+    color_map = colormaps.get_cmap('viridis')
+    # Apply the colormap (returns RGBA)
+    rgba = color_map(x)  # shape: (H, W, 4)
+    # Drop alpha and transpose to (3, H, W)
+    rgb = rgba[..., :3]  # (3, H, W)
+    rgb[mask == 0] = 1
+    rgb_uint8 = (rgb * 255).astype(np.uint8)
+    return rgb_uint8
+  
+
+def visualize_results(mask, pred, label, filename):
     # Create a plot with the reversed grayscale colormap so 0=white, 1=black
-    if denormalize:
-        pred  = (pred + 1.) / 2. * 255.  
-        label = (label + 1.) / 2. * 255.  
-        contour[contour <=0.5] = 0
-        contour[contour != 0] = 1
-        
-    plot_data = torch.cat((pred * contour, label * contour), dim=0)
-    plot_data = plot_data.cpu().numpy()
-    plt.figure()
-    plt.imshow(
-        plot_data, cmap='gray_r', vmin=0, vmax=255)  # vmin/vmax set to 0-1 for proper color scaling
-    plt.axis('off')  # Optional: turn off axes for a cleaner image
-    # Save the figure to a TIFF file
-    plt.savefig(filename, format='png')
-    plt.close()  # Close the figure to free memory
+    pred = pred.cpu().numpy()
+    label = label.cpu().numpy()
+    mask = mask.cpu().numpy()
+    
+    pred_uint8 = apply_colors_to_array(x=pred, mask=mask)
+    img = Image.fromarray(pred_uint8)
+    img.save(filename)
+    
+    label_uint8 = apply_colors_to_array(x=label, mask=mask)
+    img = Image.fromarray(label_uint8)
+    img.save(filename.replace('.png', '_gt.png'))
 
 
-def evaluate(model, dataloader, device):
+def evaluate(mask, label, pred):
     """
-    Evaluate the model on the test set and return the average MSE loss.
+    Evaluate the model on the test set
     """
-    model.eval()
-    with torch.no_grad():
-        for filename, inputs, targets in dataloader:
-            # Move input to device
-            inputs = inputs.to(device)  # Shape: (1, 2, H, W)
-            # Move each target modality to device and then concatenate along channel dim.
-            target_pressure    = targets['pressure'].to(device)
-            target_temperature = targets['temperature'].to(device)
-            target_velocity    = targets['velocity'].to(device)
-            
-            # Forward pass
-            outputs = model(inputs).squeeze()
-            contour = inputs[0]
-            pred_P, pred_T, pred_V = outputs[0], outputs[1], outputs[2]
-            
-            visualize_results(target_pressure.squeeze(), pred_P, filename=f'{filename}-pressure.png')
-            visualize_results(target_temperature.squeeze(), pred_T, filename=f'{filename}-temperature.png')
-            visualize_results(target_velocity.squeeze(), pred_V, filename=f'{filename}-velocity.png')
+    pass
 
 
 def main():
@@ -96,21 +95,26 @@ def main():
             inputs = data_dict['inputs'].to(device)  # (B, 1, H, W)
             # Move each target modality to device and then concatenate along channel dim.
             targets = data_dict['targets'].squeeze().to(device)  # (3, H, W)
-            label_p = targets[0]
-            label_p = targets[1]
-            label_v = targets[2]
+            targets = (targets + 1.) / 2. 
             
             # Forward pass
-            outputs = model(inputs).squeeze()
-            contour = inputs.squeeze()[0]
-
+            outputs = model(inputs).squeeze().clip(-1.0, 1.0)
+            outputs = (outputs + 1.) / 2. 
+            
+            # make mask
+            masks = (inputs.squeeze()[0].detach() > 0.5)
+            contour = masks.float()
+        
             base_path = f"{results_path}/{data_dict['filepath'][0]}"
             visualize_results(
-                contour, label_p, outputs[0], filename=f'{base_path}-pressure.png')
+                contour, targets[0], outputs[0], filename=f'{base_path}-p.png')
             visualize_results(
-                contour, label_p, outputs[1], filename=f'{base_path}-temperature.png')
+                contour, targets[1], outputs[1], filename=f'{base_path}-t.png')
             visualize_results(
-                contour, label_v, outputs[2], filename=f'{base_path}-velocity.png')
+                contour, targets[2], outputs[2], filename=f'{base_path}-v.png')
+            
+            # masks = (inputs.squeeze()[0].detach() > 0.5)
+            
 
 if __name__ == '__main__':
     main()
