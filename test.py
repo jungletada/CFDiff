@@ -1,20 +1,30 @@
 import os
+import numpy as np
+from tqdm import tqdm
+
 import torch
 import torch.nn as nn
-import numpy as np
+
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
+
 from src.deepcfd.models.UNetEx import UNetEx
-from data_utils.cfd_dataset import CaseDataDataset
+from data_utils.cfd_dataset import CFDDataset
 
 
-def visualize_results(contour, prediction, label, filename):
+def visualize_results(contour, pred, label, filename, denormalize=True):
     # Create a plot with the reversed grayscale colormap so 0=white, 1=black
-    # mask = contour
-    data = torch.cat((prediction * contour, label * contour), dim=0)
-    data = data.cpu().numpy()
+    if denormalize:
+        pred  = (pred + 1.) / 2. * 255.  
+        label = (label + 1.) / 2. * 255.  
+        contour[contour <=0.5] = 0
+        contour[contour != 0] = 1
+        
+    plot_data = torch.cat((pred * contour, label * contour), dim=0)
+    plot_data = plot_data.cpu().numpy()
     plt.figure()
-    plt.imshow(data, cmap='gray_r', vmin=0, vmax=1)  # vmin/vmax set to 0-1 for proper color scaling
+    plt.imshow(
+        plot_data, cmap='gray_r', vmin=0, vmax=255)  # vmin/vmax set to 0-1 for proper color scaling
     plt.axis('off')  # Optional: turn off axes for a cleaner image
     # Save the figure to a TIFF file
     plt.savefig(filename, format='png')
@@ -26,24 +36,14 @@ def evaluate(model, dataloader, device):
     Evaluate the model on the test set and return the average MSE loss.
     """
     model.eval()
-    mse_loss_fn = nn.MSELoss(reduction='mean')
-    total_loss = 0.
-    total_samples = 0.
-
     with torch.no_grad():
         for filename, inputs, targets in dataloader:
             # Move input to device
-            inputs = inputs.to(device)  # Shape: (B, 1, H, W)
+            inputs = inputs.to(device)  # Shape: (1, 2, H, W)
             # Move each target modality to device and then concatenate along channel dim.
             target_pressure    = targets['pressure'].to(device)
             target_temperature = targets['temperature'].to(device)
             target_velocity    = targets['velocity'].to(device)
-            
-            # Concatenate targets: final shape (B, 3, H, W)
-            targets = torch.cat([
-                target_pressure,
-                target_temperature,
-                target_velocity], dim=1).to(device)
             
             # Forward pass
             outputs = model(inputs).squeeze()
@@ -53,25 +53,22 @@ def evaluate(model, dataloader, device):
             visualize_results(target_pressure.squeeze(), pred_P, filename=f'{filename}-pressure.png')
             visualize_results(target_temperature.squeeze(), pred_T, filename=f'{filename}-temperature.png')
             visualize_results(target_velocity.squeeze(), pred_V, filename=f'{filename}-velocity.png')
-            
-    #         loss = mse_loss_fn(outputs, targets)
-    #         # Accumulate loss weighted by batch size
-    #         batch_size = inputs.size(0)
-    #         total_loss += loss.item() * batch_size
-    #         total_samples += batch_size
-
-    # avg_loss = total_loss / total_samples
-    # return avg_loss
 
 
 def main():
     batch_size = 1
     num_workers = 2
     # Test set root directory (should contain subfolders: contour, pressure, temperature, velocity)
-    test_root_dir = 'data/case_data2/fluent_data_fig'
+    test_root_dir = 'data/case_data2/fluent_data_map'
     # Build the test dataset and dataloader
-    test_dataset = CaseDataDataset(test_root_dir, train=False)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    test_dataset = CFDDataset(
+        test_root_dir, 
+        mode='test')
+    test_loader = DataLoader(
+        test_dataset, 
+        batch_size=batch_size, 
+        shuffle=False, 
+        num_workers=num_workers)
     
     # Set device for computation
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -80,7 +77,8 @@ def main():
     model = UNetEx(in_channels=2, out_channels=3).to(device)
     
     # Optionally load a trained checkpoint if available
-    checkpoint_path = os.path.join("checkpoints", "epoch_2000.pth")
+    checkpoint_path = os.path.join("checkpoints", "epoch_3000.pth")
+    
     if os.path.exists(checkpoint_path):
         print(f"Loading model checkpoint from {checkpoint_path} ...")
         model.load_state_dict(torch.load(checkpoint_path, map_location=device))
@@ -91,34 +89,28 @@ def main():
     os.makedirs(results_path, exist_ok=True)
     # Evaluate the model on the test set using MSE
     model.eval()
-    mse_loss_fn = nn.MSELoss(reduction='mean')
-    total_loss = 0.
-    total_samples = 0.
 
     with torch.no_grad():
-        for filename, inputs, targets in test_loader:
+        for data_dict in tqdm(test_loader):
             # Move input to device
-            inputs = inputs.to(device)  # Shape: (B, 1, H, W)
+            inputs = data_dict['inputs'].to(device)  # (B, 1, H, W)
             # Move each target modality to device and then concatenate along channel dim.
-            targets = targets.to(device)  # Shape: (B, 1, H, W)
-            target_pressure    = targets[0][0]
-            target_temperature = targets[0][1]
-            target_velocity    = targets[0][2]
-            
-            # Concatenate targets: final shape (B, 3, H, W)
-            targets = torch.cat([
-                target_pressure,
-                target_temperature,
-                target_velocity], dim=1).to(device)
+            targets = data_dict['targets'].squeeze().to(device)  # (3, H, W)
+            label_p = targets[0]
+            label_p = targets[1]
+            label_v = targets[2]
             
             # Forward pass
             outputs = model(inputs).squeeze()
             contour = inputs.squeeze()[0]
 
-            base_path = f"{results_path}/{filename[0]}"
-            visualize_results(contour, target_pressure, outputs[0], filename=f'{base_path}-pressure.png')
-            visualize_results(contour, target_temperature, outputs[1], filename=f'{base_path}-temperature.png')
-            visualize_results(contour, target_velocity, outputs[2], filename=f'{base_path}-velocity.png')
+            base_path = f"{results_path}/{data_dict['filepath'][0]}"
+            visualize_results(
+                contour, label_p, outputs[0], filename=f'{base_path}-pressure.png')
+            visualize_results(
+                contour, label_p, outputs[1], filename=f'{base_path}-temperature.png')
+            visualize_results(
+                contour, label_v, outputs[2], filename=f'{base_path}-velocity.png')
 
 if __name__ == '__main__':
     main()

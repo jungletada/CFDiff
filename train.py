@@ -32,7 +32,7 @@ def training_criterion(intputs, outputs, targets):
     loss_P = l1_criterion(outputs[:,0,:,:] * masks, targets[:,0,:,:] * masks)
     loss_T = mse_criterion(outputs[:,1,:,:] * masks, targets[:,1,:,:] * masks)
     loss_V = mse_criterion(outputs[:,2,:,:] * masks, targets[:,2,:,:] * masks)
-    loss = loss_T + loss_V + loss_P
+    loss = loss_P + loss_T + loss_V
     return loss
     
 
@@ -45,7 +45,7 @@ def main():
     device = torch.device(f"cuda:{local_rank}")
     
     # Hyperparameters
-    num_epochs = 2000
+    num_epochs = 3000
     batch_size = 32
     learning_rate = 1e-3
     log_interval = 20
@@ -79,19 +79,19 @@ def main():
         T_max=num_epochs, 
         eta_min=1e-5)
     
-    # Only rank 0 initializes wandb
-    if rank == 0:
-        wandb.init(
-            entity="dingjie-peng-waseda-university",
-            project="small-demo",
-            config={
-                "epochs": num_epochs,
-                "batch_size": batch_size,
-                "learning_rate": learning_rate,
-                "architecture": "UNetEx",
-                "distributed": True}
-            )
-    wandb.watch(model)
+    # # Only rank 0 initializes wandb
+    # if rank == 0:
+    #     wandb.init(
+    #         entity="dingjie-peng-waseda-university",
+    #         project="small-demo",
+    #         config={
+    #             "epochs": num_epochs,
+    #             "batch_size": batch_size,
+    #             "learning_rate": learning_rate,
+    #             "architecture": "UNetEx",
+    #             "distributed": True}
+    #         )
+    # wandb.watch(model)
     # Create checkpoint directory
     checkpoint_dir = "checkpoints"
     if rank == 0:
@@ -123,7 +123,6 @@ def main():
             if rank == 0 and (i + 1) % log_interval == 0:
                 avg_loss = running_loss / log_interval
                 print(f"Epoch [{epoch+1}/{num_epochs}], Step [{i+1}/{len(dataloader)}], Loss: {avg_loss:.4f}")
-                wandb.log({"Loss": avg_loss})
                 running_loss = 0.0
 
         # Adjust the learning rate using Cosine Annealing
