@@ -1,18 +1,23 @@
 import torch
 import pandas as pd
 
+p_stat = {'min': -37.73662186, 'max':57.6361618}
+t_stat = {'min': 299.9764404, 'max':310.3595276}
+v_stat = {'min': 0.0, 'max': 0.3930110071636349}
 
-def abs_relative_difference(output, target, valid_mask=None):
-    actual_output = output
-    actual_target = target
-    abs_relative_diff = torch.abs(actual_output - actual_target) / actual_target
+
+def abs_relative_difference(output, target, valid_mask=None, stat=p_stat):
+    scale = stat['max'] - stat['min']
+    actual_output = output * scale + stat['min']
+    actual_target = target * scale + stat['min']
+    abs_relative_diff = torch.abs(actual_output - actual_target) / torch.abs(actual_target)
     if valid_mask is not None:
-        abs_relative_diff[valid_mask] = 0
+        abs_relative_diff[~valid_mask] = 0
         n = valid_mask.sum((-1, -2))
     else:
-        n = output.shape[-1] * output.shape[-2]
-    abs_relative_diff = torch.sum(abs_relative_diff, (-1, -2)) / n
-    return abs_relative_diff.mean()
+        n = output.shape[0] * output.shape[1]
+    abs_relative_diff = torch.sum(abs_relative_diff) / n
+    return abs_relative_diff
 
 
 def squared_relative_difference(output, target, valid_mask=None):
@@ -22,7 +27,7 @@ def squared_relative_difference(output, target, valid_mask=None):
         torch.pow(torch.abs(actual_output - actual_target), 2) / actual_target
     )
     if valid_mask is not None:
-        square_relative_diff[valid_mask] = 0
+        square_relative_diff[~valid_mask] = 0
         n = valid_mask.sum((-1, -2))
     else:
         n = output.shape[-1] * output.shape[-2]

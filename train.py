@@ -1,15 +1,33 @@
 import os
+import argparse
+import logging
+import wandb
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, DistributedSampler
-import wandb
 
+
+from src.deepcfd.models import get_model
 from src.deepcfd.models.UNetEx import UNetEx
 from data_utils.cfd_dataset import CFDDataset
 
+
+def get_args():
+    parser = argparse.ArgumentParser(description='Training parameters')
+    parser.add_argument('--num_epochs', type=int, default=3000, help='Number of epochs')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
+    parser.add_argument('--learning_rate', type=float, default=1e-3, help='Learning rate')
+    parser.add_argument('--log_interval', type=int, default=20, help='Log interval')
+    parser.add_argument('--root_dir', type=str, default='data/case_data1/fluent_data_map', help='Root directory for data')
+    parser.add_argument('--model_type', type=str, default='unet', help='Specify the type of model to use for training')
+    parser.add_argument('--checkpoint_dir', type=str, default='checkpoints', help='Directory where model checkpoints will be saved')
+    
+    args = parser.parse_args()
+    return args
 
 def setup_ddp():
     """ Initialize the distributed process group. """
@@ -43,12 +61,12 @@ def main():
     local_rank = rank % torch.cuda.device_count()
     device = torch.device(f"cuda:{local_rank}")
     
-    # Hyperparameters
-    num_epochs = 3000
-    batch_size = 32
-    learning_rate = 1e-3
-    log_interval = 20
-    root_dir = 'data/case_data1/fluent_data_map'
+    args = get_args()
+    num_epochs = args.num_epochs
+    batch_size = args.batch_size
+    learning_rate = args.learning_rate
+    log_interval = args.log_interval
+    root_dir = args.root_dir
     
     dataset = CFDDataset(root_dir, mode='train')
     
@@ -62,37 +80,31 @@ def main():
         dataset, 
         batch_size=batch_size, 
         sampler=sampler, 
-        num_workers=dist.get_world_size()*2, 
+        num_workers=dist.get_world_size() * 2, 
         pin_memory=True)
     
     # Initialize model and move to GPU
-    model = UNetEx(in_channels=2, out_channels=3).to(device)
-    model = DDP(model, device_ids=[local_rank], output_device=local_rank)
+    # model = UNetEx(in_channels=2, out_channels=3).to(device)
+    model_type = get_model(key=args.model_type)
+    
+    model = model_type(in_channels=2, 
+                       out_channels=3).to(device)
+    model = DDP(model, 
+                device_ids=[local_rank], 
+                output_device=local_rank)
     
     # Loss function and optimizer
     optimizer = optim.AdamW(
-        model.parameters(), lr=learning_rate)
+        model.parameters(), 
+        lr=learning_rate)
     # **Cosine Annealing Learning Rate Scheduler**
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer, 
         T_max=num_epochs, 
         eta_min=1e-5)
     
-    # # Only rank 0 initializes wandb
-    # if rank == 0:
-    #     wandb.init(
-    #         entity="dingjie-peng-waseda-university",
-    #         project="small-demo",
-    #         config={
-    #             "epochs": num_epochs,
-    #             "batch_size": batch_size,
-    #             "learning_rate": learning_rate,
-    #             "architecture": "UNetEx",
-    #             "distributed": True}
-    #         )
-    # wandb.watch(model)
     # Create checkpoint directory
-    checkpoint_dir = "checkpoints"
+    checkpoint_dir = os.path.join(args.checkpoint_dir, args.model_type)
     if rank == 0:
         os.makedirs(checkpoint_dir, exist_ok=True)
     
@@ -103,7 +115,7 @@ def main():
         
         running_loss = 0.0
         for i, data_ in enumerate(dataloader):
-            inputs, targets, filenames = data_['inputs'], data_['targets'], data_['filepath']
+            inputs, targets = data_['inputs'], data_['targets']
             inputs = inputs.to(device)
             targets = targets.to(device)
             
@@ -128,7 +140,7 @@ def main():
         scheduler.step()
 
         # Save checkpoint only on rank 0
-        if rank == 0 and (epoch + 1) % 100 == 0:
+        if rank == 0 and (epoch + 1) % 200 == 0:
             checkpoint_path = os.path.join(checkpoint_dir, f"epoch_{epoch+1}.pth")
             torch.save(model.module.state_dict(), checkpoint_path)
             print(f"Checkpoint saved at {checkpoint_path}")

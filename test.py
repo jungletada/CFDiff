@@ -5,14 +5,16 @@ from PIL import Image
 
 import torch
 import torch.nn as nn
-
 from torch.utils.data import DataLoader
+
 import matplotlib.pyplot as plt
 from matplotlib import colormaps
 
 from src.deepcfd.models.UNetEx import UNetEx
 from data_utils.cfd_dataset import CFDDataset
-
+from src.deepcfd.metrics import abs_relative_difference, \
+    squared_relative_difference, delta1_acc
+    
 
 def apply_colors_to_array(x, mask):
     """
@@ -21,8 +23,8 @@ def apply_colors_to_array(x, mask):
     Returns:
         rgb: numpy array of shape (3, H, W), dtype=float32, RGB values in [0, 1]
     """
-    # Get the viridis colormap
-    color_map = colormaps.get_cmap('viridis')
+    # Get the colormap
+    color_map = colormaps.get_cmap('Spectral')
     # Apply the colormap (returns RGBA)
     rgba = color_map(x)  # shape: (H, W, 4)
     # Drop alpha and transpose to (3, H, W)
@@ -47,11 +49,30 @@ def visualize_results(mask, pred, label, filename):
     img.save(filename.replace('.png', '_gt.png'))
 
 
-def evaluate(mask, label, pred):
+def evaluate(mask, pred, label):
     """
     Evaluate the model on the test set
     """
-    pass
+    abs_relative_diff = abs_relative_difference(
+        output=pred,
+        target=label,
+        valid_mask=mask
+    )
+    delta1_accuracy = delta1_acc(
+        pred=pred,
+        gt=label,
+        valid_mask=mask
+    )
+    
+    sq_relative_diff = squared_relative_difference(
+        output=pred,
+        target=label,
+        valid_mask=mask
+    )
+    return {'abs_relative_diff': abs_relative_diff, 
+            'delta1_accuracy': delta1_accuracy,
+            'sq_relative_diff':sq_relative_diff,
+            }
 
 
 def main():
@@ -89,6 +110,11 @@ def main():
     # Evaluate the model on the test set using MSE
     model.eval()
 
+    sum_AbsRel = 0.
+    sum_SqRel = 0.
+    sum_delta1_acc = 0.
+    num_inputs = len(test_dataset)
+    
     with torch.no_grad():
         for data_dict in tqdm(test_loader):
             # Move input to device
@@ -102,19 +128,31 @@ def main():
             outputs = (outputs + 1.) / 2. 
             
             # make mask
-            masks = (inputs.squeeze()[0].detach() > 0.5)
+            masks = (inputs.squeeze()[0].detach() > 0.5).bool()
+            
+            eval_results = evaluate(masks, outputs[0], targets[0])
+            sum_AbsRel += eval_results['abs_relative_diff']
+            sum_SqRel += eval_results['sq_relative_diff']
+            sum_delta1_acc += eval_results['delta1_accuracy']
             contour = masks.float()
+            
+            # base_path = f"{results_path}/{data_dict['filepath'][0]}"
+            # visualize_results(
+            #     contour, outputs[0], targets[0], filename=f'{base_path}-p.png')
+            # visualize_results(
+            #     contour, outputs[1], targets[1], filename=f'{base_path}-t.png')
+            # visualize_results(
+            #     contour, outputs[2], targets[2], filename=f'{base_path}-v.png')
+
+        avg_AbsRel = sum_AbsRel / num_inputs
+        avg_SqRel = sum_SqRel / num_inputs
+        avg_del_acc = sum_delta1_acc / num_inputs
         
-            base_path = f"{results_path}/{data_dict['filepath'][0]}"
-            visualize_results(
-                contour, targets[0], outputs[0], filename=f'{base_path}-p.png')
-            visualize_results(
-                contour, targets[1], outputs[1], filename=f'{base_path}-t.png')
-            visualize_results(
-                contour, targets[2], outputs[2], filename=f'{base_path}-v.png')
-            
-            # masks = (inputs.squeeze()[0].detach() > 0.5)
-            
+        print(f"Number of test inputs: {num_inputs}\n"
+              f"Absolute Mean Relative Error (AbsRel): {avg_AbsRel:.4f}\n"
+              f"Square Mean Relative Error (SqRel): {avg_SqRel:.4f}\n"
+              f"delta1 Accuracy: {avg_del_acc:.4f}"
+              )
 
 if __name__ == '__main__':
     main()

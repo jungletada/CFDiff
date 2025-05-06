@@ -57,7 +57,7 @@ def create_decoder(out_channels, filters, kernel_size, wn=True, bn=True, activat
     return nn.Sequential(*decoder)
 
 
-class UNetEx(nn.Module):
+class UNetExAvg(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, filters=[16, 32, 64], layers=2,
                  weight_norm=True, batch_norm=True, activation=nn.ReLU, final_activation=None):
         super().__init__()
