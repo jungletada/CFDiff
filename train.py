@@ -12,19 +12,25 @@ from torch.utils.data import DataLoader, DistributedSampler
 
 
 from src.deepcfd.models import get_model
-from src.deepcfd.models.UNetEx import UNetEx
 from data_utils.cfd_dataset import CFDDataset
 
 
 def get_args():
     parser = argparse.ArgumentParser(description='Training parameters')
-    parser.add_argument('--num_epochs', type=int, default=3000, help='Number of epochs')
-    parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
-    parser.add_argument('--learning_rate', type=float, default=1e-3, help='Learning rate')
-    parser.add_argument('--log_interval', type=int, default=20, help='Log interval')
-    parser.add_argument('--root_dir', type=str, default='data/case_data1/fluent_data_map', help='Root directory for data')
-    parser.add_argument('--model_type', type=str, default='unet', help='Specify the type of model to use for training')
-    parser.add_argument('--checkpoint_dir', type=str, default='checkpoints', help='Directory where model checkpoints will be saved')
+    parser.add_argument('--num_epochs', type=int, 
+                        default=3000, help='Number of epochs')
+    parser.add_argument('--batch_size', type=int, 
+                        default=32, help='Batch size')
+    parser.add_argument('--learning_rate', type=float, 
+                        default=1e-3, help='Learning rate')
+    parser.add_argument('--log_interval', type=int, 
+                        default=20, help='Log interval')
+    parser.add_argument('--root_dir', type=str, 
+                        default='data/case_data1/fluent_data_map', help='Root directory for data')
+    parser.add_argument('--model_type', type=str, 
+                        default='unet', help='Specify the type of model to use for training')
+    parser.add_argument('--checkpoint_dir', type=str, 
+                        default='checkpoints', help='Directory where model checkpoints will be saved')
     
     args = parser.parse_args()
     return args

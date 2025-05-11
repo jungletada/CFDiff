@@ -4,7 +4,6 @@ import pandas as pd
 from tqdm import tqdm
 
 
-
 if __name__ == '__main__':
     case_dir = 'case_data2'
     source_folder = f'data/{case_dir}/fluent_data_csv'

@@ -118,7 +118,11 @@ Further hyper-parameters used are provided in Table 1:
 
 
 
-
+| Domain |  MAE  |  RMSE  |   R2   |   SSIM   |   PSNR  |
+|--------|-------|--------|--------|----------|---------|
+| pressure | 0.0679 | 0.0898| 0.8081 |0.8091 | 20.9107 |
+| temperature | 0.0493 | 0.0655| 0.7406 |0.8475 | 23.6386 |
+| velocity | 0.1273 | 0.1696| 0.5970 |0.5967 | 15.4382 |
 
 
 
