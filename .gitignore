@@ -4,6 +4,7 @@
 *.pth
 *.png
 *.tiff
+*.egg-info
 
 demo/
 wandb/

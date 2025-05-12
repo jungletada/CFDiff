@@ -50,7 +50,7 @@ def main():
     # Build the test dataset and dataloader
     test_dataset = CFDDataset(
         args.root_dir, 
-        mode='test')
+        is_train='test')
     test_loader = DataLoader(
         test_dataset, 
         batch_size=args.batch_size, 
