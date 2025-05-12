@@ -31,11 +31,11 @@ def get_args():
                         help='Root directory for data')
     parser.add_argument('--model_type', 
                         type=str, 
-                        default='unet', 
+                        default='unetex', 
                         help='Specify the type of model to use for training')
     parser.add_argument('--checkpoint_path', 
                         type=str, 
-                        default='checkpoints/unet/epoch_3000.pth', 
+                        default='checkpoints/unetex/epoch_3000.pth', 
                         help='Directory where model checkpoints will be saved')
     parser.add_argument('--num_workers', 
                         type=int, 
