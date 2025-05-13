@@ -15,7 +15,7 @@ from .blocks import (
 def _make_fusion_block(features, use_bn):
     return FeatureFusionBlock_custom(
         features,
-        nn.ReLU(False),
+        nn.SiLU(),
         deconv=False,
         bn=use_bn,
         expand=False,
@@ -88,7 +88,7 @@ class DPT(BaseModel):
 
 class DPTDepthModel(DPT):
     def __init__(
-        self, path=None, non_negative=True, scale=1.0, shift=0.0, invert=False, **kwargs
+        self, path=None, non_negative=False, scale=1.0, shift=0.0, invert=False, **kwargs
     ):
         features = kwargs["features"] if "features" in kwargs else 256
 
@@ -99,11 +99,7 @@ class DPTDepthModel(DPT):
         head = nn.Sequential(
             nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
             Interpolate(scale_factor=2, mode="bilinear", align_corners=True),
-            nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(True),
-            nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
-            nn.ReLU(True) if non_negative else nn.Identity(),
-            nn.Identity(),
+            nn.Conv2d(features // 2, 3, kernel_size=3, stride=1, padding=1),
         )
 
         super().__init__(head, **kwargs)
@@ -113,12 +109,13 @@ class DPTDepthModel(DPT):
 
     def forward(self, x):
         inv_depth = super().forward(x).squeeze(dim=1)
-
-        if self.invert:
-            depth = self.scale * inv_depth + self.shift
-            depth[depth < 1e-8] = 1e-8
-            depth = 1.0 / depth
-            return depth
-        else:
-            return inv_depth
+        return inv_depth
+    
+        # if self.invert:
+        #     depth = self.scale * inv_depth + self.shift
+        #     depth[depth < 1e-8] = 1e-8
+        #     depth = 1.0 / depth
+        #     return depth
+        # else:
+        #     return inv_depth
 

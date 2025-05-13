@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 
 
 
-from src.deepcfd.models import get_model
+from src.deepcfd.models import build_model
 from eval_metrics import Evaluator
 from data_utils.cfd_dataset import CFDDataset
 from data_utils.cfd_dataset import \
@@ -63,7 +63,7 @@ def main():
     # Initialize the model 
     # (input: contour image with 2 channel, 
     # output: 3 channels for pressure, temperature, velocity)
-    model_type = get_model(key=args.model_type)
+    model_type = build_model(key=args.model_type)
     
     model = model_type(in_channels=2, 
                        out_channels=3).to(device)

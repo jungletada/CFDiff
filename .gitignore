@@ -6,6 +6,7 @@
 *.tiff
 *.egg-info
 
+weights/
 demo/
 wandb/
 data/

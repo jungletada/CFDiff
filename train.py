@@ -1,4 +1,5 @@
 import os
+import datetime
 import argparse
 import logging
 import wandb
@@ -11,24 +12,24 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, DistributedSampler
 
 
-from src.deepcfd.models import get_model
+from src.deepcfd.models import build_model
 from data_utils.cfd_dataset import CFDDataset
 
 
 def get_args():
     parser = argparse.ArgumentParser(description='Training parameters')
     parser.add_argument('--num_epochs', type=int, 
-                        default=3000, help='Number of epochs')
+                        default=2000, help='Number of epochs')
     parser.add_argument('--batch_size', type=int, 
-                        default=32, help='Batch size')
+                        default=10, help='Batch size')
     parser.add_argument('--learning_rate', type=float, 
-                        default=1e-3, help='Learning rate')
+                        default=1e-4, help='Learning rate')
     parser.add_argument('--log_interval', type=int, 
                         default=20, help='Log interval')
     parser.add_argument('--root_dir', type=str, 
                         default='data/case_data1/fluent_data_map', help='Root directory for data')
     parser.add_argument('--model_type', type=str, 
-                        default='unet', help='Specify the type of model to use for training')
+                        default='dpt', help='Specify the type of model to use for training')
     parser.add_argument('--checkpoint_dir', type=str, 
                         default='checkpoints', help='Directory where model checkpoints will be saved')
     
@@ -56,8 +57,8 @@ def training_criterion(inputs, outputs, targets):
     loss_P = l1_criterion(outputs[:,0,:,:] * masks, targets[:,0,:,:] * masks)
     loss_T = mse_criterion(outputs[:,1,:,:] * masks, targets[:,1,:,:] * masks)
     loss_V = mse_criterion(outputs[:,2,:,:] * masks, targets[:,2,:,:] * masks)
-    loss = loss_P + loss_T + loss_V
-    return loss
+    # loss = loss_P + loss_T + loss_V
+    return loss_P, loss_T, loss_V
     
 
 def main():
@@ -67,16 +68,28 @@ def main():
     rank = dist.get_rank()
     local_rank = rank % torch.cuda.device_count()
     device = torch.device(f"cuda:{local_rank}")
-    
     args = get_args()
-    num_epochs = args.num_epochs
-    batch_size = args.batch_size
-    learning_rate = args.learning_rate
-    log_interval = args.log_interval
-    root_dir = args.root_dir
     
-    dataset = CFDDataset(root_dir, is_train='train')
+    # Create checkpoint directory if it doesn't exist
+    os.makedirs(args.checkpoint_dir, exist_ok=True)
     
+    # logger setup
+    logging.basicConfig(
+        filename=os.path.join(args.checkpoint_dir, f'train_{args.model_type}.log'), 
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s')
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    console.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logging.getLogger('').addHandler(console)
+    
+    if rank == 0:
+        logging.info("Training arguments:")
+        for arg in vars(args):
+            logging.info(f"  {arg}: {getattr(args, arg)}")
+            
+    dataset = CFDDataset(args.root_dir, is_train=True)
+
     sampler = DistributedSampler(
         dataset, 
         num_replicas=dist.get_world_size(), 
@@ -85,30 +98,30 @@ def main():
     
     dataloader = DataLoader(
         dataset, 
-        batch_size=batch_size, 
+        batch_size=args.batch_size, 
         sampler=sampler, 
         num_workers=dist.get_world_size() * 2, 
         pin_memory=True)
     
     # Initialize model and move to GPU
-    # model = UNetEx(in_channels=2, out_channels=3).to(device)
-    model_type = get_model(key=args.model_type)
+    model = build_model(key=args.model_type)
+    model = model.to(device)
+    logging.info(model)
     
-    model = model_type(in_channels=2, 
-                       out_channels=3).to(device)
     model = DDP(model, 
                 device_ids=[local_rank], 
-                output_device=local_rank)
+                output_device=local_rank,
+                find_unused_parameters=True)
     
     # Loss function and optimizer
     optimizer = optim.AdamW(
         model.parameters(), 
-        lr=learning_rate)
+        lr=args.learning_rate,)
     # **Cosine Annealing Learning Rate Scheduler**
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer, 
-        T_max=num_epochs, 
-        eta_min=1e-5)
+        T_max=args.num_epochs, 
+        eta_min=1e-6)
     
     # Create checkpoint directory
     checkpoint_dir = os.path.join(args.checkpoint_dir, args.model_type)
@@ -116,7 +129,7 @@ def main():
         os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Training loop
-    for epoch in range(num_epochs):
+    for epoch in range(args.num_epochs):
         model.train()
         sampler.set_epoch(epoch)  # Ensure shuffle works correctly in distributed mode
         
@@ -128,8 +141,9 @@ def main():
             
             # Forward pass
             outputs = model(inputs)
-            loss = training_criterion(inputs, outputs, targets)
-
+            loss_P, loss_T, loss_V = training_criterion(inputs, outputs, targets)
+            loss = loss_P + loss_T + loss_V
+            
             # Backward pass and optimization
             optimizer.zero_grad()
             loss.backward()
@@ -138,9 +152,10 @@ def main():
             running_loss += loss.item()
 
             # Log only on rank 0
-            if rank == 0 and (i + 1) % log_interval == 0:
-                avg_loss = running_loss / log_interval
-                print(f"Epoch [{epoch+1}/{num_epochs}], Step [{i+1}/{len(dataloader)}], Loss: {avg_loss:.4f}")
+            if rank == 0 and (i + 1) % args.log_interval == 0:
+                avg_loss = running_loss / args.log_interval
+                logging.info(f"Epoch [{epoch+1}/{args.num_epochs}], Step [{i+1}/{len(dataloader)}], "
+                             f"Loss_P: {loss_P:.3f}, loss_T: {loss_T:.3f}, loss_V: {loss_V:.3f}, Avg_loss: {avg_loss:.4f}")
                 running_loss = 0.0
 
         # Adjust the learning rate using Cosine Annealing
@@ -150,9 +165,9 @@ def main():
         if rank == 0 and (epoch + 1) % 200 == 0:
             checkpoint_path = os.path.join(checkpoint_dir, f"epoch_{epoch+1}.pth")
             torch.save(model.module.state_dict(), checkpoint_path)
-            print(f"Checkpoint saved at {checkpoint_path}")
+            logging.info(f"Checkpoint saved at {checkpoint_path}")
     
-    print("Training complete.")
+    logging.info("Training complete.")
     
     # Clean up DDP
     cleanup()
