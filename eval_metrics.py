@@ -27,7 +27,7 @@ def load_scale(key):
         raise NotImplementedError
     
     
-def apply_colors_to_array(x, mask):
+def apply_colors_to_array(x, mask, cmap='Spectral'):
     """
     Args:
         x: numpy array of shape (H, W), values in [0, 1]
@@ -35,12 +35,13 @@ def apply_colors_to_array(x, mask):
         rgb: numpy array of shape (3, H, W), dtype=float32, RGB values in [0, 1]
     """
     # Get the colormap
-    color_map = colormaps.get_cmap('Spectral')
+    color_map = colormaps.get_cmap(cmap)
     # Apply the colormap (returns RGBA)
     rgba = color_map(x)  # shape: (H, W, 4)
     # Drop alpha and transpose to (3, H, W)
     rgb = rgba[..., :3]  # (3, H, W)
-    rgb[mask == 0] = 1
+    if mask is not None:
+        rgb[mask == 0] = 1
     rgb_uint8 = (rgb * 255).astype(np.uint8)
     return rgb_uint8
 
@@ -114,7 +115,7 @@ class Evaluator:
             self.sum_results[field][metric] += value
         return res
     
-    def visualize_single(self, mask, pred, filename, label=None):
+    def visualize_single(self, pred, filename, mask, label=None, flow=None):
         pred_uint8 = apply_colors_to_array(x=pred, mask=mask)
         image = Image.fromarray(pred_uint8)
         image.save(filename)
@@ -123,6 +124,11 @@ class Evaluator:
             label_uint8 = apply_colors_to_array(x=label, mask=mask)
             img = Image.fromarray(label_uint8)
             img.save(filename.replace('.png', '_gt.png'))
+            
+        # if flow is not None:
+        #     flow_uint8 = apply_colors_to_array(x=flow, mask=None, cmap='GnBu')
+        #     img = Image.fromarray(flow_uint8)
+        #     img.save(filename.replace('.png', '_c.png'))
     
     def compute_average(self):
         self.avg_results = \
@@ -132,8 +138,8 @@ class Evaluator:
     
     def show_average_results(self):
         # Create markdown table header
-        table =  "| Domain |  MAE  |  RMSE  |   R2   |   SSIM   |   PSNR  |\n"
-        table += "|--------|-------|--------|--------|----------|---------|\n"
+        table =  "|  Domain  |  MAE  |  RMSE  |   R2   |   SSIM   |   PSNR  |\n"
+        table += "|----------|-------|--------|--------|----------|---------|\n"
         
         # Add rows for each domain
         for domain, metrics in self.avg_results.items():

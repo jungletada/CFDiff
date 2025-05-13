@@ -99,12 +99,21 @@ def main():
             mask = (inputs.squeeze()[0].detach() > 0.5).bool()
             mask = mask.cpu().numpy()
             
+            flow = inputs.squeeze()[0].detach()
+            flow[flow > 0.5] = 1
+            flow[flow != 1] = 0
+            flow = flow.float().cpu().numpy()
             # contour = mask.float()
             base_path = f"{results_path}/{data_dict['filepath'][0]}"
             
             evaluator.evaluate_single(outputs[0],targets[0],field='pressure',mask=mask)
             evaluator.evaluate_single(outputs[1],targets[1],field='temperature',mask=mask)
             evaluator.evaluate_single(outputs[2],targets[2],field='velocity',mask=mask)
+            
+            if base_path.__contains__("826"):
+                evaluator.visualize_single(pred=outputs[0], filename=base_path+"_p.png", mask=mask, label=targets[0], flow=flow)
+                evaluator.visualize_single(pred=outputs[1], filename=base_path+"_t.png", mask=mask, label=targets[1], flow=flow)
+                evaluator.visualize_single(pred=outputs[2], filename=base_path+"_v.png", mask=mask, label=targets[2], flow=flow)
         
     evaluator.compute_average()
     evaluator.show_average_results()
