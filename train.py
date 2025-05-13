@@ -35,6 +35,7 @@ def get_args():
     args = parser.parse_args()
     return args
 
+
 def setup_ddp():
     """ Initialize the distributed process group. """
     dist.init_process_group(backend="nccl")
@@ -74,7 +75,7 @@ def main():
     log_interval = args.log_interval
     root_dir = args.root_dir
     
-    dataset = CFDDataset(root_dir, mode='train')
+    dataset = CFDDataset(root_dir, is_train='train')
     
     sampler = DistributedSampler(
         dataset, 

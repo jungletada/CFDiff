@@ -52,13 +52,13 @@ class CFDDataset(Dataset):
     def __init__(
         self,
         root_dir,
-        mode='train',
+        is_train=True,
         ):
         
         self.data_root = root_dir
-        self.mode = mode
+        self.is_train = is_train
         
-        if self.mode == 'train':
+        if self.is_train:
             list_file = FILES_TRAIN
         else:
             list_file = FILES_TEST
@@ -109,7 +109,7 @@ class CFDDataset(Dataset):
         image_f = line_values.repeat(h, 1).unsqueeze(0) # h, w
         
         flip_flag = np.random.rand() < 0.5
-        if flip_flag and self.mode == 'train':
+        if flip_flag and self.is_train == 'train':
             image_c = image_c.flip(-1)
             image_p = image_p.flip(-1)
             image_t = image_t.flip(-1)
@@ -130,7 +130,7 @@ if __name__ == '__main__':
     # Create a DataLoader for batching.
     dataloader = DataLoader(dataset, batch_size=4, shuffle=False, num_workers=2)
 
-    os.makedirs(demo_dir, exist_ok=True)
+    os.makedirs('demo', exist_ok=True)
     
     # Iterate over one batch.
     for i, data_ in enumerate(dataloader):
