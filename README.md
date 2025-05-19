@@ -36,15 +36,6 @@ Options:
 ```
 
 ```bash
-python3 -m deepcfd \
-    --net UNetEx \
-    --output DeepCFD/unetex.pt \
-    --kernel-size 5 \
-    --filters 8,16,32,32 \
-    --epochs 2000 \
-    --batch-size 32
-```
-```bash
 torchrun --nnodes=1 --nproc-per-node=1 train.py
 ```
 ## Dataset and Code
