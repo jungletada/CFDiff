@@ -31,11 +31,11 @@ def get_args():
                         help='Root directory for data')
     parser.add_argument('--model_type', 
                         type=str, 
-                        default='unetex', 
+                        default='unet', 
                         help='Specify the type of model to use for training')
     parser.add_argument('--checkpoint_path', 
                         type=str, 
-                        default='checkpoints/unetex/epoch_3000.pth', 
+                        default='checkpoints/unet/epoch_3000.pth', 
                         help='Directory where model checkpoints will be saved')
     parser.add_argument('--num_workers', 
                         type=int, 
@@ -63,10 +63,8 @@ def main():
     # Initialize the model 
     # (input: contour image with 2 channel, 
     # output: 3 channels for pressure, temperature, velocity)
-    model_type = build_model(key=args.model_type)
-    
-    model = model_type(in_channels=2, 
-                       out_channels=3).to(device)
+    model = build_model(key=args.model_type)
+    model = model.to(device)
     
     # Optionally load a trained checkpoint if available
     if os.path.exists(args.checkpoint_path):
@@ -106,14 +104,13 @@ def main():
             # contour = mask.float()
             base_path = f"{results_path}/{data_dict['filepath'][0]}"
             
-            evaluator.evaluate_single(outputs[0],targets[0],field='pressure',mask=mask)
-            evaluator.evaluate_single(outputs[1],targets[1],field='temperature',mask=mask)
-            evaluator.evaluate_single(outputs[2],targets[2],field='velocity',mask=mask)
+            evaluator.evaluate_single(outputs[0],targets[0], field='pressure', filename=base_path+"-pressure.png", mask=mask)
+            evaluator.evaluate_single(outputs[1],targets[1], field='temperature', filename=base_path+"-temperature.png", mask=mask)
+            evaluator.evaluate_single(outputs[2],targets[2], field='velocity', filename=base_path+"-velocity.png", mask=mask)
             
-            if base_path.__contains__("826"):
-                evaluator.visualize_single(pred=outputs[0], filename=base_path+"_p.png", mask=mask, label=targets[0], flow=flow)
-                evaluator.visualize_single(pred=outputs[1], filename=base_path+"_t.png", mask=mask, label=targets[1], flow=flow)
-                evaluator.visualize_single(pred=outputs[2], filename=base_path+"_v.png", mask=mask, label=targets[2], flow=flow)
+            # evaluator.visualize_single(pred=outputs[0], filename=base_path+"-pressure.png", mask=mask, field='pressure',)
+            # evaluator.visualize_single(pred=outputs[1], filename=base_path+"-temperature.png", mask=mask, field='temperature',)
+            # evaluator.visualize_single(pred=outputs[2], filename=base_path+"-velocity.png", mask=mask, field='velocity',)
         
     evaluator.compute_average()
     evaluator.show_average_results()

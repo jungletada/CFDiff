@@ -16,6 +16,12 @@ STAT_temperature={'min': 299.9764404, 'max':310.3595276}
 STAT_velocity={'min': 0.0, 'max':0.3930110071636349}
 
 
+CMAP ={
+    'pressure':'viridis', 
+    'temperature':'RdYlBu', 
+    'velocity':'magma'
+    }
+
 def load_scale(key):
     if key.__contains__('pressure'):
         return STAT_pressure
@@ -153,18 +159,21 @@ class Evaluator:
         self.denormalize = denormalize
         self.num_samples = num_samples
         
-    def evaluate_single(self, pred, label, field, mask):
+    def evaluate_single(self, pred, label, field, mask, visualize=True, filename=None):
         res = evaluate_one(pred, label, field, mask, denormalize=self.denormalize)
-        
+        if visualize:
+            if filename is None:
+                raise KeyError(f'{filename} is None')
+            else:
+                self.visualize_single(pred, filename, mask, field, label=None)
+                
         for metric, value in res.items():
             self.sum_results[field][metric] += value
         return res
-    
-    def evaluate_batch(self, pred, label, field, mask):
-        pass
         
-    def visualize_single(self, pred, filename, mask, label=None):
-        pred_uint8 = apply_colors_to_array(x=pred, mask=mask)
+    def visualize_single(self, pred, filename, mask, field, label=None):
+        cmap = CMAP[field]
+        pred_uint8 = apply_colors_to_array(x=pred, mask=mask, cmap=cmap)
         image = Image.fromarray(pred_uint8)
         image.save(filename)
         
