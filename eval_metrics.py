@@ -46,29 +46,74 @@ def apply_colors_to_array(x, mask, cmap='Spectral'):
     return rgb_uint8
 
 
-def visualize_results(mask, pred, label, filename):
-    # Create a plot with the reversed grayscale colormap so 0=white, 1=black
-    # pred = pred.cpu().numpy()
-    # label = label.cpu().numpy()
-    # mask = mask.cpu().numpy()
-    
-    pred_uint8 = apply_colors_to_array(x=pred, mask=mask)
-    image = Image.fromarray(pred_uint8)
-    image.save(filename)
-    
-    # label_uint8 = apply_colors_to_array(x=label, mask=mask)
-    # img = Image.fromarray(label_uint8)
-    # img.save(filename.replace('.png', '_gt.png'))
+def evaluate_batch(preds, labels, field, masks=None, denormalize=False):
+    """
+    Evaluate metrics for a batch of predictions and labels.
+
+    Args:
+        preds: numpy array of shape [B, H, W] or [B, 1, H, W]
+        labels: same shape as preds
+        field: str, used to load normalization stats
+        masks: optional mask array of shape [B, H, W] or [B, 1, H, W]
+        denormalize: if True, will rescale predictions and labels
+
+    Returns:
+        Dictionary of averaged metrics across the batch
+    """
+    batch_size = preds.shape[0]
+    metrics_sum = {
+        'MAE': 0.0,
+        'RMSE': 0.0,
+        'R2': 0.0,
+        'SSIM': 0.0,
+        'PSNR': 0.0
+    }
+
+    for i in range(batch_size):
+        pred = preds[i]
+        label = labels[i]
+        mask = masks[i] if masks is not None else np.ones_like(label)
+
+        # Remove channel dimension if present
+        if pred.ndim == 3:
+            pred = pred.squeeze()
+            label = label.squeeze()
+            mask = mask.squeeze()
+
+        if denormalize:
+            stat = load_scale(field)
+            pred = pred * (stat['max'] - stat['min']) + stat['min']
+            label = label * (stat['max'] - stat['min']) + stat['min']
+
+        img_true = (label * mask * 255.).astype(np.uint8)
+        img_pred = (pred * mask * 255.).astype(np.uint8)
+
+        # Only use valid (masked) pixels
+        y_true = label[mask > 0].flatten()
+        y_pred = pred[mask > 0].flatten()
+
+        # Compute metrics
+        mae = np.mean(np.abs(y_true - y_pred))
+        rmse = np.sqrt(np.mean((y_true - y_pred) ** 2))
+        r2 = r2_score(y_true, y_pred)
+        ssim_value = ssim(img_true, img_pred, data_range=img_true.max() - img_true.min())
+        psnr_value = psnr(img_true, img_pred, data_range=img_true.max() - img_true.min())
+
+        metrics_sum['MAE'] += mae
+        metrics_sum['RMSE'] += rmse
+        metrics_sum['R2'] += r2
+        metrics_sum['SSIM'] += ssim_value
+        metrics_sum['PSNR'] += psnr_value
+
+    # Average across batch
+    averaged_metrics = {k: v / batch_size for k, v in metrics_sum.items()}
+    return averaged_metrics
 
 
-def evaluate(pred, label, field, mask, denormalize=False):
+def evaluate_one(pred, label, field, mask, denormalize=False):
     if len(mask.shape) == 4 or len(mask.shape) == 3:
         mask = mask.squeeze()
         pred = pred.squeeze()
-        
-    # mask = mask.cpu().numpy()
-    # pred = pred.cpu().numpy()
-    # label = label.cpu().numpy()
     
     if denormalize:
         stat = load_scale(field)
@@ -98,24 +143,27 @@ def evaluate(pred, label, field, mask, denormalize=False):
 
 
 class Evaluator:
-    def __init__(self, num_samples):
+    def __init__(self, num_samples, denormalize=False):
         self.metrics = ['MAE', 'RMSE', 'R2', 'SSIM', 'PSNR']
         self.fields = ['pressure', 'temperature', 'velocity']
         self.sum_results = {field: {metric: 0. for metric in self.metrics} 
                             for field in self.fields}
         self.avg_results = {field: {metric: 0. for metric in self.metrics} 
                             for field in self.fields}
-        self.denormalize = False
+        self.denormalize = denormalize
         self.num_samples = num_samples
         
     def evaluate_single(self, pred, label, field, mask):
-        res = evaluate(pred, label, field, mask, denormalize=self.denormalize)
+        res = evaluate_one(pred, label, field, mask, denormalize=self.denormalize)
         
         for metric, value in res.items():
             self.sum_results[field][metric] += value
         return res
     
-    def visualize_single(self, pred, filename, mask, label=None, flow=None):
+    def evaluate_batch(self, pred, label, field, mask):
+        pass
+        
+    def visualize_single(self, pred, filename, mask, label=None):
         pred_uint8 = apply_colors_to_array(x=pred, mask=mask)
         image = Image.fromarray(pred_uint8)
         image.save(filename)
@@ -124,11 +172,6 @@ class Evaluator:
             label_uint8 = apply_colors_to_array(x=label, mask=mask)
             img = Image.fromarray(label_uint8)
             img.save(filename.replace('.png', '_gt.png'))
-            
-        # if flow is not None:
-        #     flow_uint8 = apply_colors_to_array(x=flow, mask=None, cmap='GnBu')
-        #     img = Image.fromarray(flow_uint8)
-        #     img.save(filename.replace('.png', '_c.png'))
     
     def compute_average(self):
         self.avg_results = \
@@ -138,8 +181,8 @@ class Evaluator:
     
     def show_average_results(self):
         # Create markdown table header
-        table =  "|  Domain  |  MAE  |  RMSE  |   R2   |   SSIM   |   PSNR  |\n"
-        table += "|----------|-------|--------|--------|----------|---------|\n"
+        table =  "|  Domain    |   MAE   |   RMSE   |   R2   |   SSIM   |   PSNR   |\n"
+        table += "|------------|---------|----------|--------|----------|----------|\n"
         
         # Add rows for each domain
         for domain, metrics in self.avg_results.items():

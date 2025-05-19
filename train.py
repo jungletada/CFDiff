@@ -29,7 +29,7 @@ def get_args():
     parser.add_argument('--root_dir', type=str, 
                         default='data/case_data1/fluent_data_map', help='Root directory for data')
     parser.add_argument('--model_type', type=str, 
-                        default='dpt', help='Specify the type of model to use for training')
+                        default='unetexmod', help='Specify the type of model to use for training')
     parser.add_argument('--checkpoint_dir', type=str, 
                         default='checkpoints', help='Directory where model checkpoints will be saved')
     
